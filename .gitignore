@@ -6,3 +6,4 @@ lib
 bin
 *.egg-info
 build
+dist
