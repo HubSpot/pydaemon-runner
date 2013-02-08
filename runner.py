@@ -3,10 +3,13 @@ import os
 import sys
 import pipes
 import daemon
+import shutil
+import datetime
 import argparse
 import subprocess
+import contextlib
 
-from lockfile.pidlockfile import PIDLockFile
+from lockfile.pidlockfile import PIDLockFile, LockTimeout, NotMyLock
 
 
 def main():
@@ -28,7 +31,7 @@ def main():
         context.stderr = get_foreground_stream(2, args)
 
     if args.pid_file:
-        context.pidfile = PIDLockFile(args.pid_file)
+        context.pidfile = pidlock(args.pid_file)
 
     if args.user:
         context.uid = get_uid(args.user)
@@ -41,8 +44,10 @@ def exec_process(args):
     try:
         code = subprocess.Popen(' '.join(pipes.quote(arg) for arg in args.command),
                                 shell=True).wait()
+        move_logs(args)
         sys.exit(code)
     except KeyboardInterrupt:
+        move_logs(args)
         sys.exit(130)
 
 
@@ -56,6 +61,21 @@ def parse_args():
     parser.add_argument("-u", "--user", help="User to run process")
     parser.add_argument("-c", "--command", help="Command to run", nargs=argparse.REMAINDER, required=True)
     return parser.parse_args()
+
+
+def move_logs(args):
+    date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    for name in ('stdout', 'stderr'):
+        filename = getattr(args, name, None)
+        if not filename:
+            continue
+        basename, extension = filename.rsplit('.', 1)
+        new_filename = '{0}-{1}.{1}'.format(
+            basename,
+            date,
+            extension
+        )
+        shutil.move(filename, new_filename)
 
 
 # Delegate to tee if running in foreground.
@@ -90,6 +110,30 @@ def ensure_dir(filename):
             os.makedirs(dirname)
         except OSError:
             pass
+
+
+@contextlib.contextmanager
+def pidlock(pid_file):
+    lock = PIDLockFile(pid_file)
+    acquired = False
+    try:
+        lock.acquire(timeout=.5)
+        acquired = True
+        yield
+    except (LockTimeout, NotMyLock):
+        sys.stderr.write("Couldn't acquire pidfile lock {0}, owned by {1}\n".format(pid_file, get_pid(pid_file)))
+        sys.exit(1)
+    finally:
+        if acquired:
+            lock.release()
+
+
+def get_pid(pid_file):
+    try:
+        with open(pid_file) as f:
+            return f.read().strip()
+    except:
+        return 'n/a'
 
 
 if __name__ == '__main__':
