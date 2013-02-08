@@ -70,7 +70,7 @@ def move_logs(args):
         if not filename:
             continue
         basename, extension = filename.rsplit('.', 1)
-        new_filename = '{0}-{1}.{1}'.format(
+        new_filename = '{0}-{1}.{2}'.format(
             basename,
             date,
             extension
