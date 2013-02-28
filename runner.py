@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 import os
 import sys
+import time
 import pipes
 import daemon
+import atexit
 import shutil
 import datetime
 import argparse
@@ -39,16 +41,26 @@ def main():
     with context:
         exec_process(args)
 
+process = [None]
+
 
 def exec_process(args):
+    atexit.register(after_exit)
     try:
-        code = subprocess.Popen(' '.join(pipes.quote(arg) for arg in args.command),
-                                shell=True).wait()
+        process[0] = subprocess.Popen(' '.join(pipes.quote(arg) for arg in args.command),
+                                      shell=True)
+        code = process[0].wait()
         move_logs(args)
         sys.exit(code)
     except KeyboardInterrupt:
         move_logs(args)
         sys.exit(130)
+
+
+def after_exit():
+    while process[0].poll() is None:
+        process[0].terminate()
+        time.sleep(1)
 
 
 def parse_args():
