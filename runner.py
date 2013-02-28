@@ -4,6 +4,7 @@ import sys
 import time
 import pipes
 import daemon
+import signal
 import atexit
 import shutil
 import datetime
@@ -46,6 +47,7 @@ process = [None]
 
 def exec_process(args):
     atexit.register(after_exit)
+    signal.signal(signal.SIGABRT, sigkill_child)
     try:
         process[0] = subprocess.Popen(' '.join(pipes.quote(arg) for arg in args.command),
                                       shell=True)
@@ -60,6 +62,12 @@ def exec_process(args):
 def after_exit():
     while process[0].poll() is None:
         process[0].terminate()
+        time.sleep(1)
+
+
+def sigkill_child():
+    while process[0].poll() is None:
+        process[0].send_signal(signal.SIGKILL)
         time.sleep(1)
 
 
