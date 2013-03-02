@@ -14,7 +14,7 @@ if sys.version_info < (2, 7):
 
 
 setup(name='daemon-runner',
-      version='0.0.6',
+      version='0.0.7',
       description='Simple command line runner on top of python-daemon',
       author='HubSpot Developers',
       author_email='dev@hubspot.com',
@@ -22,8 +22,8 @@ setup(name='daemon-runner',
       zip_safe=False,
       include_package_data=True,
       install_requires=requirements,
-      py_modules=['runner'],
+      py_modules=['daemon_runner'],
       platforms=['any'],
       entry_points={
-          'console_scripts': ['daemon-runner=runner:main'],
+          'console_scripts': ['daemon-runner=daemon_runner:main'],
       })

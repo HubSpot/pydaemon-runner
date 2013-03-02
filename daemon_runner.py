@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import pipes
+import errno
 import daemon
 import signal
 import atexit
@@ -11,8 +12,6 @@ import datetime
 import argparse
 import subprocess
 import contextlib
-
-from lockfile.pidlockfile import PIDLockFile, LockTimeout, NotMyLock
 
 
 def main():
@@ -33,33 +32,52 @@ def main():
     else:
         context.stderr = get_foreground_stream(2, args)
 
-    if args.pid_file:
-        context.pidfile = pidlock(args.pid_file)
-
     if args.user:
         context.uid = get_uid(args.user)
 
     with context:
-        exec_process(args)
+        try:
+            exec_process(args, args.pid_file or None)
+        except KeyboardInterrupt:
+            move_logs(args)
+            sys.exit(130)
+
 
 process = [None]
 
 
-def exec_process(args):
+def exec_process(args, pid_file=None):
     atexit.register(after_exit)
     signal.signal(signal.SIGABRT, sigkill_child)
+
+    try:
+        pidfile = acquire_pidfile_lock(pid_file)
+    except:
+        sys.stderr.write("Couldn't acquire pidfile lock {0}, owned by {1}\n".format(pid_file, get_pid(pid_file)))
+        sys.exit(1)
+
     try:
         process[0] = subprocess.Popen(' '.join(pipes.quote(arg) for arg in args.command),
                                       shell=True)
-        code = process[0].wait()
+        p = process[0]
+        pid = p.pid
+
+        if pidfile:
+            write_pid_to_pidfile(pidfile, pid)
+
+        code = p.wait()
         move_logs(args)
-        sys.exit(code)
-    except KeyboardInterrupt:
-        move_logs(args)
-        sys.exit(130)
+    finally:
+        try:
+            if pid_file is not None:
+                os.unlink(pid_file)
+        except:
+            pass
+    sys.exit(code)
 
 
 def after_exit():
+    if process[0] is None: return
     while process[0].poll() is None:
         process[0].terminate()
         time.sleep(1)
@@ -132,28 +150,44 @@ def ensure_dir(filename):
             pass
 
 
-@contextlib.contextmanager
-def pidlock(pid_file):
-    lock = PIDLockFile(pid_file)
-    acquired = False
-    try:
-        lock.acquire(timeout=.5)
-        acquired = True
-        yield
-    except (LockTimeout, NotMyLock):
-        sys.stderr.write("Couldn't acquire pidfile lock {0}, owned by {1}\n".format(pid_file, get_pid(pid_file)))
-        sys.exit(1)
-    finally:
-        if acquired:
-            lock.release()
-
-
 def get_pid(pid_file):
     try:
         with open(pid_file) as f:
             return f.read().strip()
     except:
         return 'n/a'
+
+
+def open_pidfile(pidfile_path):
+    open_flags = (os.O_CREAT | os.O_EXCL | os.O_RDWR)
+    open_mode = 0o644
+    pidfile_fd = os.open(pidfile_path, open_flags, open_mode)
+    return os.fdopen(pidfile_fd, 'w')
+
+
+def write_pid_to_pidfile(pidfile, pid):
+    pidfile.seek(0)
+    line = "%(pid)d\n" % {'pid': pid}
+    pidfile.truncate()
+    pidfile.write(line)
+    pidfile.flush()
+
+
+def acquire_pidfile_lock(pidfile_path=None):
+    if not pidfile_path: return
+    end_time = time.time() + 5.0
+    while True:
+        try:
+            pidfile = open_pidfile(pidfile_path)
+            write_pid_to_pidfile(pidfile, os.getpid())
+            return pidfile
+        except OSError as exc:
+            if exc.errno == errno.EEXIST:
+                if time.time() > end_time:
+                    raise Exception("Failed to lock")
+                time.sleep(0.1)
+            else:
+                raise Exception(exc)
 
 
 if __name__ == '__main__':
