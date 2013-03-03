@@ -136,9 +136,13 @@ def get_uid(user):
         return int(user)
     except ValueError:
         pass
-    return subprocess.Popen("id -u {0}".format(pipes.quote(user)),
+    uid = subprocess.Popen("id -u {0}".format(pipes.quote(user)),
                             shell=True,
                             stdout=subprocess.PIPE).communicate()[0]
+    try:
+        return int(uid.strip())
+    except ValueError:
+        return
 
 
 def ensure_dir(filename):
