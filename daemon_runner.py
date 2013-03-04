@@ -171,6 +171,10 @@ def open_pidfile(pidfile_path):
     try:
         fcntl.flock(pidfile_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except IOError as e:
+        try:
+            os.close(pidfile_fd)
+        except:
+            pass
         if e.errno in (errno.EACCES, errno.EAGAIN):
             raise LockTaken()
 
