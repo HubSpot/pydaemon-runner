@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import fcntl
 import pipes
 import errno
 import daemon
@@ -163,9 +164,16 @@ def get_pid(pid_file):
 
 
 def open_pidfile(pidfile_path):
-    open_flags = (os.O_CREAT | os.O_EXCL | os.O_RDWR)
+    open_flags = (os.O_CREAT | os.O_RDWR)
     open_mode = 0o644
     pidfile_fd = os.open(pidfile_path, open_flags, open_mode)
+
+    try:
+        fcntl.flock(pidfile_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError as e:
+        if e.errno in (errno.EACCES, errno.EAGAIN):
+            raise LockTaken()
+
     return os.fdopen(pidfile_fd, 'w')
 
 
@@ -185,13 +193,14 @@ def acquire_pidfile_lock(pidfile_path=None):
             pidfile = open_pidfile(pidfile_path)
             write_pid_to_pidfile(pidfile, os.getpid())
             return pidfile
-        except OSError as exc:
-            if exc.errno == errno.EEXIST:
-                if time.time() > end_time:
-                    raise Exception("Failed to lock")
-                time.sleep(0.1)
-            else:
-                raise Exception(exc)
+        except LockTaken:
+            if time.time() > end_time:
+                raise Exception("Failed to lock")
+            time.sleep(0.1)
+
+
+class LockTaken(Exception):
+    pass
 
 
 if __name__ == '__main__':
