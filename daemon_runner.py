@@ -52,8 +52,8 @@ def exec_process(args, pid_file=None):
 
     try:
         pidfile = acquire_pidfile_lock(pid_file)
-    except:
-        sys.stderr.write("Couldn't acquire pidfile lock {0}, owned by {1}\n".format(pid_file, get_pid(pid_file)))
+    except Exception, e:
+        sys.stderr.write("Couldn't acquire pidfile lock {0}, owned by {1} ({2})\n".format(pid_file, get_pid(pid_file), e))
         sys.exit(1)
 
     try:
