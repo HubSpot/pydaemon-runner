@@ -36,9 +36,14 @@ def main():
     if args.user:
         context.uid = get_uid(args.user)
 
+    if args.single_process and args.pid_file:
+        context.pid_file = args.pid_file
+
     with context:
+        if args.single_process:
+            exec_process(args)
         try:
-            exec_process(args, args.pid_file or None)
+            watch_process(args, args.pid_file or None)
         except KeyboardInterrupt:
             move_logs(args)
             sys.exit(130)
@@ -47,7 +52,11 @@ def main():
 process = [None]
 
 
-def exec_process(args, pid_file=None):
+def exec_process(args):
+    os.execl('/bin/sh', '/bin/sh', '-c', ' '.join(pipes.quote(arg) for arg in args.command))
+
+
+def watch_process(args, pid_file=None):
     atexit.register(after_exit)
     signal.signal(signal.SIGABRT, sigkill_child)
 
@@ -99,6 +108,7 @@ def parse_args():
     parser.add_argument("-p", "--pid-file", help="PID file location")
     parser.add_argument("-u", "--user", help="User to run process")
     parser.add_argument("-c", "--command", help="Command to run", nargs=argparse.REMAINDER, required=True)
+    parser.add_argument("-s", "--single-process", help="Do not wrap process and just exec the child process.", action="store_true")
     return parser.parse_args()
 
 
@@ -138,8 +148,8 @@ def get_uid(user):
     except ValueError:
         pass
     uid = subprocess.Popen("id -u {0}".format(pipes.quote(user)),
-                            shell=True,
-                            stdout=subprocess.PIPE).communicate()[0]
+                           shell=True,
+                           stdout=subprocess.PIPE).communicate()[0]
     try:
         return int(uid.strip())
     except ValueError:
