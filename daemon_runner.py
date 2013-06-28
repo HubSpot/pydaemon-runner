@@ -27,6 +27,8 @@ def main():
     else:
         context.stdout = get_foreground_stream(1, args)
 
+    context.prevent_core = False
+
     if args.stderr:
         ensure_dir(args.stderr)
         context.stderr = get_wrapped_stream(2, args.stderr, args)
@@ -38,6 +40,10 @@ def main():
 
     if args.single_process and args.pid_file:
         context.pid_file = args.pid_file
+
+    if not args.daemon:
+        context.files_preserve = [sys.stdin.fileno()]
+        context.stdin = sys.stdin
 
     with context:
         if args.single_process:
@@ -66,9 +72,14 @@ def watch_process(args, pid_file=None):
         sys.stderr.write("Couldn't acquire pidfile lock {0}, owned by {1} ({2})\n".format(pid_file, get_pid(pid_file), e))
         sys.exit(1)
 
+    if args.daemon:
+        stdin = None
+    else:
+        stdin = sys.stdin
+
     try:
         process[0] = subprocess.Popen(' '.join(pipes.quote(arg) for arg in args.command),
-                                      shell=True)
+                                      shell=True, stdin=stdin)
         p = process[0]
         pid = p.pid
 
