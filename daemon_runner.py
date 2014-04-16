@@ -87,7 +87,10 @@ def watch_process(args, pid_file=None):
             write_pid_to_pidfile(pidfile, pid)
 
         code = p.wait()
-        move_logs(args)
+        try:
+            move_logs(args)
+        except:
+            pass
     finally:
         try:
             if pid_file is not None:
