@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
- $ pip install pydaemon-runner
+ $ pip install daemon-runner
 ```
 
 ## Usage
